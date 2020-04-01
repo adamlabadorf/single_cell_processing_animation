@@ -1,7 +1,3 @@
-int sign(float x) {
-  return x >= 0? 1 : -1; 
-}
-
 void arrow(PVector p1, PVector p2) {
   float x1 = p1.x;
   float y1 = p1.y;
@@ -25,21 +21,20 @@ class Body {
   PVector acc;
   float mass;
   float init_vel = 100;
+  color col;
   
-  Body(PVector initPos, PVector inAttractor) {
+  Body(PVector initPos, PVector inAttractor, color c) {
     pos = initPos.copy();
     attractor = inAttractor.copy();
     acc = PVector.sub(attractor,pos).mult(0.1);
     vel = new PVector(-acc.y,acc.x);
     acc = new PVector(0,0);
     mass = random(0,10);
+    col = c;
     draw();
   }
-  float r = 0.0001; //r is a combination of density, cross section area, and coefficient
   void update(float dt) {
 
-    // acceleration from attractor
-    // linear
     float d = attractor.dist(pos);
     acc = PVector.sub(attractor,pos).div(mass).mult(dt).limit(100);
 
@@ -58,9 +53,10 @@ class Body {
     return "("+pos.toString()+","+attractor.toString()+","+vel+","+acc+")";
   }
   
-  void draw() {  
-    stroke(255);
-    ellipse(pos.x, pos.y,1,1);    
+  void draw() {
+    noStroke();
+    fill(col);
+    ellipse(pos.x, pos.y,2,2);    
     //arrow(pos,PVector.add(pos,vel.copy().setMag(10)));
   }
 }
@@ -73,36 +69,76 @@ PVector randomVectorOnRadius(float r) {
  return new PVector(r*sin(theta),r*cos(theta));
 }
 Body body = null;
-int num_bodies = 23000;
-Body[] bodies;
+int num_bodies = 2000;
+ArrayList<Body> bodies;
 
-Body[] createBodies(int num_bodies) {
+Body[] createBodies(int num_bodies, int r, int b) {
   Body[] bodies = new Body[num_bodies];
   for(int i = 0; i <  num_bodies; i++) {
-    bodies[i] = new Body(randomVectorOnRadius(1500),randomVectorInBox(500));
+    bodies[i] = new Body(randomVectorOnRadius(r),randomVectorInBox(b),color(10));
   }
   return bodies;
 }
 
+ArrayList<Body> loadBodies(String jsonFn, String colorKey) {
+  JSONArray values = loadJSONArray(jsonFn);
+  int num_cells = values.size();
+  ArrayList<Body> bodies = new ArrayList<Body>();
+  float scaleFactor = 10;
+  for (int i = 0; i < values.size(); i++) {
+    JSONObject cell = values.getJSONObject(i);
+    color c;
+    if(colorKey.equals("none")) {
+      c = color(10);
+    } else {    
+      int cInt = Integer.parseInt(cell.getString(colorKey),16);
+      c = color(red(cInt),green(cInt),blue(cInt));
+    }
+    bodies.add(
+      new Body(
+        randomVectorOnRadius(max(width,height)),
+        new PVector(
+          cell.getFloat("tsne_1")*scaleFactor,
+          cell.getFloat("tsne_2")*scaleFactor
+         ),
+         c
+      )
+    );
+    if(i == num_cells-1) { break; }
+  }
+  println("bodies loaded:"+values.size());
+  return bodies;
+}
+
+String[] orgs = {"human","mouse"};
+String org = "mouse";
+
+String[] colorKeys = {"none","cluster_color","region_color","class_color"};
+String colorKey = "none";
+
 void setup() {
-  size(1920,1440);
-  background(0);
-  bodies = createBodies(num_bodies);
+  size(1280,960);
+  background(255);
+  //bodies = createBodies(num_bodies,max(width,height),min(width,height)/2);
+  bodies = loadBodies(org+"/processing_data.json",colorKey);
   randomSeed(0);
   noiseSeed(0);
 }
 
 
 float dt = 0.005;
+int frames = 0;
 
 void draw() {
-
+  
   float num_stable = 0;
 
-  background(0);
+  background(255);
   translate(width/2,height/2);
-  stroke(255);
-  ellipse(0,0,5,5);
+  //scale(5);
+  
+  //stroke(10);
+  //ellipse(0,0,5,5);
   
   for(Body body: bodies) {
     //println(body);
@@ -110,12 +146,21 @@ void draw() {
       num_stable += 1;
     } else {
       body.update(dt);
+      //println(body);
     }
+
     body.draw();
   }
   
-  if(num_stable == num_bodies) {
-    bodies = createBodies(num_bodies);
+  saveFrame(org+"/"+colorKey+"/"+colorKey+"-####.png");
+  frames += 1;
+  if(num_stable == bodies.size() || frames == 1000) {
+    println("done");
+    exit();
   }
+
+  //if(num_stable == num_bodies) {
+  //  bodies = createBodies(num_bodies,max(width,height),min(width,height)/2);
+  //}
   //delay(1000);
 }
